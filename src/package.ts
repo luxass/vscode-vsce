@@ -148,6 +148,8 @@ export interface IPackageOptions {
 	 * Should use Yarn instead of NPM.
 	 */
 	readonly useYarn?: boolean;
+
+	readonly usePnpm?: boolean;
 	readonly dependencyEntryPoints?: string[];
 	readonly ignoreFile?: string;
 	readonly gitHubIssueLinking?: boolean;
@@ -1637,7 +1639,7 @@ const defaultIgnore = [
 
 async function collectAllFiles(
 	cwd: string,
-	dependencies: 'npm' | 'yarn' | 'none' | undefined,
+	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
 	dependencyEntryPoints?: string[],
 	followSymlinks: boolean = true
 ): Promise<string[]> {
@@ -1651,24 +1653,25 @@ async function collectAllFiles(
 	return Promise.all(promises).then(util.flatten);
 }
 
-function getDependenciesOption(options: IPackageOptions): 'npm' | 'yarn' | 'none' | undefined {
+function getDependenciesOption(options: IPackageOptions): 'npm' | 'pnpm' | 'yarn' | 'none' | undefined {
 	if (options.dependencies === false) {
 		return 'none';
 	}
 
-	switch (options.useYarn) {
-		case true:
-			return 'yarn';
-		case false:
-			return 'npm';
-		default:
-			return undefined;
+	if (options.usePnpm) {
+		return 'pnpm';
 	}
+
+	if (options.useYarn) {
+		return 'yarn';
+	}
+
+	return 'npm'
 }
 
 function collectFiles(
 	cwd: string,
-	dependencies: 'npm' | 'yarn' | 'none' | undefined,
+	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
 	dependencyEntryPoints?: string[],
 	ignoreFile?: string,
 	manifestFileIncludes?: string[],
@@ -1680,6 +1683,7 @@ function collectFiles(
 
 	return collectAllFiles(cwd, dependencies, dependencyEntryPoints, followSymlinks).then(files => {
 		files = files.filter(f => !/\r$/m.test(f));
+		console.log("BEFORE REMOVING IGNORED FILES", files)
 
 		return (
 			fs.promises
@@ -1786,7 +1790,7 @@ export function collect(manifest: ManifestPackage, options: IPackageOptions = {}
 	const processors = createDefaultProcessors(manifest, options);
 
 	return collectFiles(cwd, getDependenciesOption(options), packagedDependencies, ignoreFile, manifest.files, options.readmePath, options.followSymlinks).then(fileNames => {
-		const files = fileNames.map(f => ({ path: util.filePathToVsixPath(f), localPath: path.join(cwd, f) }));
+		const files = fileNames.map(f => ({ path: util.filePathToVsixPath(f, options.usePnpm), localPath: path.join(cwd, f) }));
 
 		return processFiles(processors, files);
 	});
@@ -1800,13 +1804,14 @@ function writeVsix(files: IFile[], packagePath: string): Promise<void> {
 			() =>
 				new Promise((c, e) => {
 					const zip = new yazl.ZipFile();
-					files.forEach(f =>
-						isInMemoryFile(f)
+					files.forEach(f => {
+						// console.log(`Adding: ${JSON.stringify(f, null, 2)}`);
+						return isInMemoryFile(f)
 							? zip.addBuffer(typeof f.contents === 'string' ? Buffer.from(f.contents, 'utf8') : f.contents, f.path, {
 								mode: f.mode,
 							})
 							: zip.addFile(f.localPath, f.path, { mode: f.mode })
-					);
+					});
 					zip.end();
 
 					const zipStream = fs.createWriteStream(packagePath);
@@ -1874,6 +1879,8 @@ export async function pack(options: IPackageOptions = {}): Promise<IPackageResul
 	const cwd = options.cwd || process.cwd();
 	const manifest = await readManifest(cwd);
 	const files = await collect(manifest, options);
+
+	console.log("FILES", files)
 
 	await printAndValidatePackagedFiles(files, cwd, manifest, options);
 

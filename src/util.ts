@@ -199,7 +199,12 @@ export function bytesToString(bytes: number): string {
 	return `${size} ${unit}`;
 }
 
-export function filePathToVsixPath(originalFilePath: string): string {
+export function filePathToVsixPath(originalFilePath: string, isPnpm: boolean = false): string {
+	if (isPnpm) {
+		// pnpm has .pnpm and also a name and version, which we strip.
+		const modifedFilePath = originalFilePath.replace(/node_modules\/\.pnpm\/[^/]+\/node_modules\//, "node_modules/");
+		return `extension/${modifedFilePath}`;
+	}
 	return `extension/${originalFilePath}`;
 }
 
@@ -229,7 +234,7 @@ export async function generateFileStructureTree(rootFolder: string, filePaths: {
 			// Create the node if it doesn't exist
 			if (!currentLevel[part]) {
 				if (isFile) {
-					// The file size is stored in the leaf node, 
+					// The file size is stored in the leaf node,
 					currentLevel[part] = 0;
 				} else {
 					// The folder size is stored in the folder node

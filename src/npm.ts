@@ -182,6 +182,44 @@ async function getYarnProductionDependencies(cwd: string, packagedDependencies?:
 	return result;
 }
 
+type PnpmDependency = {
+	from: string;
+	version: string;
+	resolved: string;
+	path: string;
+	dependencies: Record<string, PnpmDependency>;
+ }
+
+async function getPnpmDependencies(cwd: string, _packagedDependencies?: string[]): Promise<string[]> {
+	const result = new Set([cwd]);
+
+	const raw = await new Promise<string>((c, e) =>
+		cp.exec(
+			'pnpm list --production --json --depth=99999 --loglevel=error',
+			{ cwd, encoding: 'utf8', env: { DISABLE_V8_COMPILE_CACHE: "1", ...process.env }, maxBuffer: 5000 * 1024 },
+			(err, stdout) => (err ? e(err) : c(stdout))
+		)
+	);
+
+	const deps = JSON.parse(raw)[0].dependencies as Record<string, PnpmDependency>;
+	const flatten = (dep: PnpmDependency) => {
+		result.add(dep.path);
+		if (dep.dependencies) {
+			for (const child of Object.values(dep.dependencies)) {
+				flatten(child);
+			}
+		}
+	}
+
+	for (const [_name, value] of Object.entries(deps)) {
+		flatten(value);
+	}
+
+	console.log("result", result);
+
+	return [...result]
+}
+
 async function getYarnDependencies(cwd: string, packagedDependencies?: string[]): Promise<string[]> {
 	const result = new Set([cwd]);
 
@@ -211,15 +249,19 @@ export async function detectYarn(cwd: string): Promise<boolean> {
 
 export async function getDependencies(
 	cwd: string,
-	dependencies: 'npm' | 'yarn' | 'none' | undefined,
+	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
 	packagedDependencies?: string[]
 ): Promise<string[]> {
 	if (dependencies === 'none') {
 		return [cwd];
+	} else if (dependencies === 'pnpm' || (dependencies === undefined && (await exists(path.join(cwd, 'pnpm-lock.yaml'))))) {
+		return await getPnpmDependencies(cwd, packagedDependencies)
 	} else if (dependencies === 'yarn' || (dependencies === undefined && (await detectYarn(cwd)))) {
 		return await getYarnDependencies(cwd, packagedDependencies);
 	} else {
-		return await getNpmDependencies(cwd);
+		const a =  await getNpmDependencies(cwd);
+		console.log("npm deps", a)
+		return a;
 	}
 }
 
