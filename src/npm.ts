@@ -193,6 +193,8 @@ type PnpmDependency = {
 async function getPnpmDependencies(cwd: string, _packagedDependencies?: string[]): Promise<string[]> {
 	const result = new Set([cwd]);
 
+	// --json is the best way to get the data we need,
+	// --parseable will list all dependencies that is hoisted to the top-level node_modules
 	const raw = await new Promise<string>((c, e) =>
 		cp.exec(
 			'pnpm list --production --json --depth=99999 --loglevel=error',
@@ -211,11 +213,9 @@ async function getPnpmDependencies(cwd: string, _packagedDependencies?: string[]
 		}
 	}
 
-	for (const [_name, value] of Object.entries(deps)) {
+	for (const value of Object.values(deps)) {
 		flatten(value);
 	}
-
-	console.log("result", result);
 
 	return [...result]
 }
@@ -247,6 +247,20 @@ export async function detectYarn(cwd: string): Promise<boolean> {
 	return false;
 }
 
+export async function detectPnpm(cwd: string): Promise<boolean> {
+	for (const name of ['pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
+		if (await exists(path.join(cwd, name))) {
+			if (!process.env['VSCE_TESTS']) {
+				log.info(
+					`Detected presence of ${name}. Using 'pnpm' instead of 'npm' (to override this pass '--no-pnpm' on the command line).`
+				);
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
 export async function getDependencies(
 	cwd: string,
 	dependencies: 'npm' | 'yarn' | 'pnpm' | 'none' | undefined,
@@ -254,14 +268,12 @@ export async function getDependencies(
 ): Promise<string[]> {
 	if (dependencies === 'none') {
 		return [cwd];
-	} else if (dependencies === 'pnpm' || (dependencies === undefined && (await exists(path.join(cwd, 'pnpm-lock.yaml'))))) {
+	} else if (dependencies === 'pnpm' || (dependencies === undefined && (await detectPnpm(cwd)))) {
 		return await getPnpmDependencies(cwd, packagedDependencies)
 	} else if (dependencies === 'yarn' || (dependencies === undefined && (await detectYarn(cwd)))) {
 		return await getYarnDependencies(cwd, packagedDependencies);
 	} else {
-		const a =  await getNpmDependencies(cwd);
-		console.log("npm deps", a)
-		return a;
+		return await getNpmDependencies(cwd);
 	}
 }
 

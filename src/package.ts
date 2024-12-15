@@ -1687,7 +1687,6 @@ function collectFiles(
 
 	return collectAllFiles(cwd, dependencies, dependencyEntryPoints, followSymlinks).then(files => {
 		files = files.filter(f => !/\r$/m.test(f));
-		console.log("BEFORE REMOVING IGNORED FILES", files)
 
 		return (
 			fs.promises
@@ -1849,7 +1848,7 @@ function getDefaultPackageName(manifest: ManifestPackage, options: IPackageOptio
 	return `${manifest.name}-${version}.vsix`;
 }
 
-export async function prepublish(cwd: string, manifest: ManifestPackage, useYarn?: boolean): Promise<void> {
+export async function prepublish(cwd: string, manifest: ManifestPackage, useYarn?: boolean, usePnpm?: boolean): Promise<void> {
 	if (!manifest.scripts || !manifest.scripts['vscode:prepublish']) {
 		return;
 	}
@@ -1858,10 +1857,11 @@ export async function prepublish(cwd: string, manifest: ManifestPackage, useYarn
 		useYarn = await detectYarn(cwd);
 	}
 
-	console.log(`Executing prepublish script '${useYarn ? 'yarn' : 'npm'} run vscode:prepublish'...`);
+	const tool = useYarn ? 'yarn' : usePnpm ? 'pnpm' : 'npm';
+
+	console.log(`Executing prepublish script '${tool} run vscode:prepublish'...`);
 
 	await new Promise<void>((c, e) => {
-		const tool = useYarn ? 'yarn' : 'npm';
 		const child = cp.spawn(tool, ['run', 'vscode:prepublish'], { cwd, shell: true, stdio: 'inherit' });
 		child.on('exit', code => (code === 0 ? c() : e(`${tool} failed with exit code ${code}`)));
 		child.on('error', e);
@@ -1890,8 +1890,6 @@ export async function pack(options: IPackageOptions = {}): Promise<IPackageResul
 	const cwd = options.cwd || process.cwd();
 	const manifest = await readManifest(cwd);
 	const files = await collect(manifest, options);
-
-	console.log("FILES", files)
 
 	await printAndValidatePackagedFiles(files, cwd, manifest, options);
 
@@ -1953,7 +1951,7 @@ export async function packageCommand(options: IPackageOptions = {}): Promise<any
 	const manifest = await readManifest(cwd);
 	util.patchOptionsWithManifest(options, manifest);
 
-	await prepublish(cwd, manifest, options.useYarn);
+	await prepublish(cwd, manifest, options.useYarn, options.usePnpm);
 	await versionBump(options);
 
 	const { packagePath, files } = await pack(options);

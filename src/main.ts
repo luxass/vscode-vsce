@@ -109,8 +109,9 @@ module.exports = function (argv: string[]): void {
 		.option('--baseContentUrl <url>', 'Prepend all relative links in README.md with the specified URL.')
 		.option('--baseImagesUrl <url>', 'Prepend all relative image links in README.md with the specified URL.')
 		.option('--yarn', 'Use yarn instead of npm (default inferred from presence of yarn.lock or .yarnrc)')
-		.option('--pnpm', 'Use pnpm instead of npm (default inferred from presence of pnpm-lock.yaml)')
 		.option('--no-yarn', 'Use npm instead of yarn (default inferred from absence of yarn.lock or .yarnrc)')
+		.option('--pnpm', 'Use pnpm instead of npm (default inferred from presence of pnpm-lock.yaml)')
+		.option('--no-pnpm', 'Use npm instead of pnpm (default inferred from absence of pnpm-lock.yaml)')
 		.option('--ignoreFile <path>', 'Indicate alternative .vscodeignore')
 		.option('--no-gitHubIssueLinking', 'Disable automatic expansion of GitHub-style issue syntax into links')
 		.option('--no-gitLabIssueLinking', 'Disable automatic expansion of GitLab-style issue syntax into links')
@@ -142,7 +143,9 @@ module.exports = function (argv: string[]): void {
 					baseContentUrl,
 					baseImagesUrl,
 					yarn,
+					noYarn,
 					pnpm,
+					noPnpm,
 					ignoreFile,
 					gitHubIssueLinking,
 					gitLabIssueLinking,
@@ -172,8 +175,8 @@ module.exports = function (argv: string[]): void {
 						rewriteRelativeLinks,
 						baseContentUrl,
 						baseImagesUrl,
-						useYarn: yarn,
-						usePnpm: pnpm,
+						useYarn: yarn || !noYarn,
+						usePnpm: pnpm || !noPnpm,
 						ignoreFile,
 						gitHubIssueLinking,
 						gitLabIssueLinking,
